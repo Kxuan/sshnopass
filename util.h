@@ -21,6 +21,9 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-#define FATAL(fmt, ...) do {fprintf(stderr, (fmt),##__VA_ARGS__); _exit(1); }while(0)
+#define FATAL(fmt, ...) do {\
+  fprintf(stderr, "%s:%d: "fmt"(errno=%d)\n", __FILE__, __LINE__,##__VA_ARGS__, errno);\
+  _exit(1); \
+}while(0)
 #define min(a, b) ((a)<(b)?(a):(b))
 #endif //AUTO_SSH_AUTH_UTIL_H

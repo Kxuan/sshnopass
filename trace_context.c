@@ -112,40 +112,39 @@ int trace_step(struct trace_context *tc)
 	while (1) {
 		rc = ptrace(PTRACE_SYSCALL, tc->pid, 0, sig);
 		if (rc < 0) {
-			FATAL("ptrace: %s\n", strerror(errno));
+			FATAL("PTRACE_SYSCALL");
 		}
 		rc = waitpid(tc->pid, &status, 0);
 		if (rc != tc->pid) {
-			FATAL("waitpid: %s\n", strerror(errno));
+			FATAL("waitpid");
 		}
 		if (WIFEXITED(status)) {
-			FATAL("process exited with code %d???\n", WEXITSTATUS(status));
+			FATAL("process exited with code %d", WEXITSTATUS(status));
 		}
 		if (WIFSIGNALED(status)) {
-			FATAL("process exited with signal %d???\n", WTERMSIG(status));
+			FATAL("process exited with signal %d", WTERMSIG(status));
 		}
 		if (!WIFSTOPPED(status)) {
-			FATAL("Unexpected stop status: %x\n", status);
+			FATAL("Unexpected stop status: %x", status);
 		}
 		sig = WSTOPSIG(status);
 		switch (sig) {
 		case SIGSTOP:
 			if (ptrace(PTRACE_SETOPTIONS, tc->pid, 0L, PTRACE_O_TRACESYSGOOD) < 0) {
-				FATAL("PTRACE_O_TRACESYSGOOD: %s\n", strerror(errno));
+				FATAL("PTRACE_O_TRACESYSGOOD");
 			}
 			rc = ptrace(PTRACE_GET_SYSCALL_INFO, tc->pid, (void *) sizeof(info), &info);
 			if (rc < 0) {
-				FATAL("PTRACE_GET_SYSCALL_INFO: %s\n", strerror(errno));
+				FATAL("PTRACE_GET_SYSCALL_INFO");
 			}
 			break;
 		case SIGTRAP | 0x80:
 			rc = ptrace(PTRACE_GETREGS, tc->pid, 0, &tc->regs);
 			if (rc < 0) {
-				FATAL("PTRACE_GETREGS: %s\n", strerror(errno));
+				FATAL("PTRACE_GETREGS");
 			}
 			return 0;
 		default:
-			fprintf(stderr, "received signal %s\n", strsignal(sig));
 			continue;
 		}
 	}
@@ -158,7 +157,7 @@ void trace_commit_regs(struct trace_context *tc)
 	long rc;
 	rc = ptrace(PTRACE_SETREGS, tc->pid, 0, &tc->regs);
 	if (rc < 0) {
-		FATAL("PTRACE_SETREGS: %s\n", strerror(errno));
+		FATAL("PTRACE_SETREGS");
 	}
 }
 
@@ -179,7 +178,7 @@ int trace_exec(struct trace_context *tc, char **argv)
 	pid = fork();
 	switch (pid) {
 	case -1:
-		FATAL("fork: %s\n", strerror(errno));
+		FATAL("fork");
 	case 0:
 		ptrace(PTRACE_TRACEME);
 		// raise(SIGSTOP);  SIGSTOP makes problems.. we do not love it
@@ -187,7 +186,7 @@ int trace_exec(struct trace_context *tc, char **argv)
 	default:
 		pid = waitpid(pid, &state, WSTOPPED);
 		if (pid < 0) {
-			FATAL("waitpid: %s\n", strerror(errno));
+			FATAL("waitpid");
 		}
 		ptrace(PTRACE_SETOPTIONS, pid, 0, PTRACE_O_EXITKILL |
 		                                  PTRACE_O_TRACESYSGOOD |
@@ -195,7 +194,7 @@ int trace_exec(struct trace_context *tc, char **argv)
 		sprintf(mem_file, "/proc/%d/mem", pid);
 		memfd = open(mem_file, O_RDWR);
 		if (memfd < 0) {
-			FATAL("open %s: %s\n", mem_file, strerror(errno));
+			FATAL("open %s", mem_file);
 		}
 	}
 
@@ -355,18 +354,18 @@ found:
 	FD_ZERO(&fdset);
 	n = trace_pwrite(tc, &readfds, byte_in_use, sreadfds);
 	if (n < 0) {
-		FATAL("trace_pwrite: %s\n", strerror(errno));
+		FATAL("trace_pwrite");
 	}
 	if (swritefds) {
 		n = trace_pwrite(tc, &fdset, byte_in_use, swritefds);
 		if (n < 0) {
-			FATAL("trace_pwrite: %s\n", strerror(errno));
+			FATAL("trace_pwrite");
 		}
 	}
 	if (sexceptfds) {
 		n = trace_pwrite(tc, &fdset, byte_in_use, sexceptfds);
 		if (n < 0) {
-			FATAL("trace_pwrite: %s\n", strerror(errno));
+			FATAL("trace_pwrite");
 		}
 	}
 	trace_commit_regs(tc);

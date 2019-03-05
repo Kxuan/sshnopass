@@ -21,7 +21,9 @@ static const char *prog_name = "hack_ssh_auth";
 #define PROMPT_TOKEN "\nYour [VPN] token: "
 #define DEFAULT_CONFIG_FILE_SUFFIX "/.ssh/ssh_auth_config"
 struct {
+	size_t len_password;
 	char *password;
+	size_t len_otp_key;
 	char *otp_key;
 } cfg;
 
@@ -123,8 +125,10 @@ static int on_tty_read(struct trace_context *tc, uintptr_t sbuf, size_t count)
 {
 	switch (state) {
 	case STATE_FEED_PASSWORD:
+		if (count < cfg.len_password) {
+			FATAL("Unexpected input buffer size");
+		}
 
-		FATAL("what is password?");
 		break;
 	default:
 		break;
@@ -152,14 +156,20 @@ static int parse_config()
 
 	t = 0;
 	len = getline(&cfg.password, &t, fp);
-	if (cfg.password[len - 1] == '\n') {
-		cfg.password[len - 1] = 0;
+	if (len <= 0 || cfg.password[len - 1] != '\n') {
+		FATAL("Invalid config file");
 	}
+	cfg.password[len - 1] = '\r';
+	cfg.len_password = (size_t) len;
+
 	t = 0;
 	len = getline(&cfg.otp_key, &t, fp);
-	if (cfg.otp_key[len - 1] == '\n') {
-		cfg.otp_key[len - 1] = 0;
+	if (len <= 0 || cfg.otp_key[len - 1] != '\n') {
+		FATAL("Invalid config file");
 	}
+	cfg.otp_key[len - 1] = '\r';
+	cfg.len_otp_key = (size_t) len;
+	
 	fclose(fp);
 }
 
@@ -181,7 +191,7 @@ int main(int argc, char *argv[])
 	tc.tty_read = on_tty_read;
 	rc = trace_exec(&tc, new_argv);
 	if (rc < 0) {
-		FATAL("Unable to start ssh: %s\n", strerror(errno));
+		FATAL("trace_exec");
 	}
 	while ((rc = trace_next(&tc)) == 0) { ;
 	}
