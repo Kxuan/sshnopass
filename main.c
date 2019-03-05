@@ -17,8 +17,6 @@
 #include "util.h"
 #include "base32.h"
 
-static const char *prog_name = "hack_ssh_auth";
-
 #define PROMPT_PASSWORD "\nYour [EMAIL] password: "
 #define PROMPT_TOKEN "\nYour [VPN] token: "
 #define DEFAULT_CONFIG_FILE_SUFFIX "/.ssh/ssh_auth_config"
@@ -36,18 +34,6 @@ static enum {
 	STATE_FEED_TOKEN,
 	STATE_DONE
 } state;
-
-int msg(const char *fmt, ...)
-{
-	int rc;
-	va_list ap;
-
-	va_start(ap, fmt);
-	fprintf(stderr, "%s: ", prog_name);
-	rc = vfprintf(stderr, fmt, ap);
-	va_end(ap);
-	return rc;
-}
 
 static int find_str(const char *haystack, size_t len, const char *needle, int *distance)
 {
@@ -169,6 +155,17 @@ static int on_tty_read(struct trace_context *tc, uintptr_t sbuf, size_t count)
 	}
 }
 
+static int parse_options(int argc, char *argv[])
+{
+	if (argc == 1) {
+		printf("Usage: %s command parameters\n"
+		       "This program is used to help you input password and OTP token automatically.\n"
+		       "Please see https://github.com/Kxuan/sshnopass for more information.\n",
+		       argv[0]);
+		exit(1);
+	}
+}
+
 static int parse_config()
 {
 	FILE *fp;
@@ -215,13 +212,13 @@ int main(int argc, char *argv[])
 {
 	struct trace_context tc;
 	int rc;
-	char *new_argv[argc + 1];
+	char *new_argv[argc];
 
+	parse_options(argc, argv);
 	parse_config();
 
-	new_argv[0] = "ssh";
-	for (int i = 1; i < argc; ++i) {
-		new_argv[i] = argv[i];
+	for (int i = 0; i < argc; ++i) {
+		new_argv[i] = argv[i + 1];
 	}
 	new_argv[argc] = NULL;
 
@@ -238,6 +235,15 @@ int main(int argc, char *argv[])
 	}
 
 	trace_detach(&tc);
-
+	while (1) {
+		pid_t pid = waitpid(tc.pid, NULL, 0);
+		if (pid < 0) {
+			if (errno == EINTR) {
+				continue;
+			}
+			FATAL("waitpid");
+		}
+		break;
+	}
 	return 0;
 }
