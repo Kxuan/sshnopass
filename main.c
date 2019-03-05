@@ -19,6 +19,11 @@ static const char *prog_name = "hack_ssh_auth";
 
 #define PROMPT_PASSWORD "\nYour [EMAIL] password: "
 #define PROMPT_TOKEN "\nYour [VPN] token: "
+#define DEFAULT_CONFIG_FILE_SUFFIX "/.ssh/ssh_auth_config"
+struct {
+	char *password;
+	char *otp_key;
+} cfg;
 
 static enum {
 	STATE_PROMPT_PASSWORD,
@@ -91,7 +96,7 @@ static int match_prompt(struct trace_context *tc, const char *prompt, size_t siz
 	return -1;
 }
 
-int trace_write(struct trace_context *tc, uintptr_t sbuf, size_t count)
+static int on_tty_write(struct trace_context *tc, uintptr_t sbuf, size_t count)
 {
 	char buf[PAGE_SIZE];
 	size_t bsize;
@@ -114,19 +119,48 @@ int trace_write(struct trace_context *tc, uintptr_t sbuf, size_t count)
 	return SYSCALL_BYPASS;
 }
 
-void trace_read(struct user_regs_struct *regs)
+static int on_tty_read(struct trace_context *tc, uintptr_t sbuf, size_t count)
 {
-	int sfd = (int) regs->rdi;
-	uintptr_t sbuf = regs->rsi;
-	size_t scount = regs->rdx;
-
 	switch (state) {
 	case STATE_FEED_PASSWORD:
+
 		FATAL("what is password?");
 		break;
 	default:
 		break;
 	}
+}
+
+static int parse_config()
+{
+	FILE *fp;
+	size_t len_cfg_path;
+	int n;
+	size_t t;
+	ssize_t len;
+	len_cfg_path = strlen(getenv("HOME")) + sizeof(DEFAULT_CONFIG_FILE_SUFFIX);
+	char filename[len_cfg_path];
+
+	n = sprintf(filename, "%s", getenv("HOME"));
+	sprintf(filename + n, "%s", DEFAULT_CONFIG_FILE_SUFFIX);
+
+	fp = fopen(filename, "r");
+	if (fp == NULL) {
+		fprintf(stderr, "Unexpected error while reading config file %s: %s\n", filename, strerror(errno));
+		return -1;
+	}
+
+	t = 0;
+	len = getline(&cfg.password, &t, fp);
+	if (cfg.password[len - 1] == '\n') {
+		cfg.password[len - 1] = 0;
+	}
+	t = 0;
+	len = getline(&cfg.otp_key, &t, fp);
+	if (cfg.otp_key[len - 1] == '\n') {
+		cfg.otp_key[len - 1] = 0;
+	}
+	fclose(fp);
 }
 
 int main(int argc, char *argv[])
@@ -135,13 +169,16 @@ int main(int argc, char *argv[])
 	int rc;
 	char *new_argv[argc + 1];
 
+	parse_config();
+
 	new_argv[0] = "ssh";
 	for (int i = 1; i < argc; ++i) {
 		new_argv[i] = argv[i];
 	}
 	new_argv[argc] = NULL;
 
-	tc.tty_write = trace_write;
+	tc.tty_write = on_tty_write;
+	tc.tty_read = on_tty_read;
 	rc = trace_exec(&tc, new_argv);
 	if (rc < 0) {
 		FATAL("Unable to start ssh: %s\n", strerror(errno));

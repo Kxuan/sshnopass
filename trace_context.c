@@ -303,10 +303,22 @@ static int hook_write(struct trace_context *tc)
 		return SYSCALL_BYPASS;
 	}
 
-	printf("tty write fd %d\n", sfd);
 	return tc->tty_write(tc, sbuf, count);
 }
 
+static int hook_read(struct trace_context *tc)
+{
+	struct user_regs_struct *regs = &tc->regs;
+	int sfd = (int) regs->rdi;
+	uintptr_t sbuf = regs->rsi;
+	size_t count = regs->rdx;
+
+	if (!FD_ISSET(sfd, &tc->tty_fd)) {
+		return SYSCALL_BYPASS;
+	}
+
+	return tc->tty_read(tc, sbuf, count);
+}
 static int hook_select(struct trace_context *tc)
 {
 	struct user_regs_struct *regs = &tc->regs;
@@ -387,6 +399,9 @@ int trace_next(struct trace_context *tc)
 		break;
 	case __NR_write:
 		op = hook_write(tc);
+		break;
+	case __NR_read:
+		op = hook_read(tc);
 		break;
 	case __NR_select:
 		op = hook_select(tc);
