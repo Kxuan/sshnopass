@@ -9,4 +9,7 @@ add_executable(auto_ssh_auth
         trace_context.c trace_context.h
         util.h
         strsyscall.c strsyscall.h
-        )
+        otp.c otp.h
+        base32.c base32.h)
+target_link_libraries(auto_ssh_auth PUBLIC mbedcrypto)
+

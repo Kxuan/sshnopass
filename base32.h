@@ -15,15 +15,10 @@
  *  along with auto_ssh_auth.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef AUTO_SSH_AUTH_UTIL_H
-#define AUTO_SSH_AUTH_UTIL_H
+#ifndef AUTO_SSH_AUTH_BASE32_H
+#define AUTO_SSH_AUTH_BASE32_H
 
-#include <stdlib.h>
-#include <stdio.h>
+#include <stdint.h>
+int base32_decode(const char *input, uint8_t *out);
 
-#define FATAL(fmt, ...) do {\
-  fprintf(stderr, "%s:%d: "fmt" (errno=%d)\n", __FILE__, __LINE__,##__VA_ARGS__, errno);\
-  _exit(1); \
-}while(0)
-#define min(a, b) ((a)<(b)?(a):(b))
-#endif //AUTO_SSH_AUTH_UTIL_H
+#endif //AUTO_SSH_AUTH_BASE32_H

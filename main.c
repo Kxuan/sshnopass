@@ -12,8 +12,10 @@
 #include <malloc.h>
 #include <event.h>
 #include <assert.h>
+#include "otp.h"
 #include "trace_context.h"
 #include "util.h"
+#include "base32.h"
 
 static const char *prog_name = "hack_ssh_auth";
 
@@ -24,7 +26,7 @@ struct {
 	size_t len_password;
 	char *password;
 	size_t len_otp_key;
-	char *otp_key;
+	uint8_t otp_key[4096];
 } cfg;
 
 static enum {
@@ -88,8 +90,10 @@ static int match_prompt(struct trace_context *tc, const char *prompt, size_t siz
 		}
 		break;
 	case STATE_PROMPT_TOKEN:
-		if (memcmp(prompt + size - sizeof(PROMPT_TOKEN), PROMPT_TOKEN, sizeof(PROMPT_TOKEN) - 1) == 0) {
+		if (find_str(prompt, size, PROMPT_TOKEN, &distance)) {
 			state = STATE_FEED_TOKEN;
+			distance = 0;
+			tc->drain_data = 1;
 		}
 		break;
 	default:
@@ -123,13 +127,43 @@ static int on_tty_write(struct trace_context *tc, uintptr_t sbuf, size_t count)
 
 static int on_tty_read(struct trace_context *tc, uintptr_t sbuf, size_t count)
 {
+	ssize_t n;
+
 	switch (state) {
 	case STATE_FEED_PASSWORD:
 		if (count < cfg.len_password) {
 			FATAL("Unexpected input buffer size");
 		}
 
-		break;
+		trace_block(tc);
+		n = trace_pwrite(tc, cfg.password, cfg.len_password, sbuf);
+		if (n != cfg.len_password) {
+			FATAL("Unable to feed password");
+		}
+		tc->regs.rax = cfg.len_password;
+		trace_commit_regs(tc);
+		tc->drain_data = 0;
+		state = STATE_PROMPT_TOKEN;
+		return SYSCALL_HANDLED;
+	case STATE_FEED_TOKEN: {
+		char token[7];
+		if (count < 7) {
+			FATAL("Unexpected input buffer size");
+		}
+
+		trace_block(tc);
+		otp_totp(cfg.otp_key, cfg.len_otp_key, token);
+		token[sizeof(token) - 1] = '\r';
+		n = trace_pwrite(tc, token, sizeof(token), sbuf);
+		if (n != sizeof(token)) {
+			FATAL("Unable to feed password");
+		}
+		tc->regs.rax = sizeof(token);
+		trace_commit_regs(tc);
+		tc->drain_data = 0;
+		state = STATE_DONE;
+		return SYSCALL_HANDLED;
+	}
 	default:
 		break;
 	}
@@ -162,14 +196,18 @@ static int parse_config()
 	cfg.password[len - 1] = '\r';
 	cfg.len_password = (size_t) len;
 
+	char *line = NULL;
 	t = 0;
-	len = getline(&cfg.otp_key, &t, fp);
-	if (len <= 0 || cfg.otp_key[len - 1] != '\n') {
+	len = getline(&line, &t, fp);
+	if (len <= 0 || line[len - 1] != '\n') {
 		FATAL("Invalid config file");
 	}
-	cfg.otp_key[len - 1] = '\r';
-	cfg.len_otp_key = (size_t) len;
-	
+	n = base32_decode(line, cfg.otp_key);
+	if (n <= 0) {
+		FATAL("Invalid config file");
+	}
+	cfg.len_otp_key = (size_t) n;
+	free(line);
 	fclose(fp);
 }
 

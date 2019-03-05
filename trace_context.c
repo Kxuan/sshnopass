@@ -275,7 +275,6 @@ static int hook_dup(struct trace_context *tc)
 	trace_step(tc);
 	newfd = (int) regs->rax;
 	if (newfd >= 0) {
-		printf("dup fd %d -> %d\n", oldfd, newfd);
 		FD_SET(newfd, &tc->tty_fd);
 	}
 	return SYSCALL_HANDLED;
@@ -382,7 +381,6 @@ int trace_next(struct trace_context *tc)
 		return rc;
 	}
 
-	printf("SYSCALL: %s\n", strsyscall((int) tc->regs.orig_rax));
 	switch (tc->regs.orig_rax) {
 	case __NR_open:
 		op = hook_open(tc);

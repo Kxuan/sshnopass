@@ -15,15 +15,12 @@
  *  along with auto_ssh_auth.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef AUTO_SSH_AUTH_UTIL_H
-#define AUTO_SSH_AUTH_UTIL_H
+#ifndef AUTO_SSH_AUTH_OTP_H
+#define AUTO_SSH_AUTH_OTP_H
 
-#include <stdlib.h>
-#include <stdio.h>
+#include <sys/types.h>
+#include <inttypes.h>
 
-#define FATAL(fmt, ...) do {\
-  fprintf(stderr, "%s:%d: "fmt" (errno=%d)\n", __FILE__, __LINE__,##__VA_ARGS__, errno);\
-  _exit(1); \
-}while(0)
-#define min(a, b) ((a)<(b)?(a):(b))
-#endif //AUTO_SSH_AUTH_UTIL_H
+void otp_totp(const void *secret, size_t secret_size, char digest[6]);
+
+#endif //AUTO_SSH_AUTH_OTP_H
