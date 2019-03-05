@@ -231,7 +231,13 @@ int main(int argc, char *argv[])
 	if (rc < 0) {
 		FATAL("trace_exec");
 	}
-	while ((rc = trace_next(&tc)) == 0) { ;
+	while (state != STATE_DONE) {
+		if (trace_next(&tc) < 0) {
+			FATAL("trace_next");
+		}
 	}
+
+	trace_detach(&tc);
+
 	return 0;
 }

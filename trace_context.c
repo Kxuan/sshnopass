@@ -414,3 +414,10 @@ int trace_next(struct trace_context *tc)
 
 	return 0;
 }
+
+void trace_detach(struct trace_context *tc)
+{
+	ptrace(PTRACE_DETACH, tc->pid, 0, 0);
+	close(tc->memfd);
+	tc->memfd = -1;
+}

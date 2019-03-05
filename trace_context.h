@@ -63,4 +63,6 @@ int trace_step(struct trace_context *tc);
 
 int trace_next(struct trace_context *tc);
 
+void trace_detach(struct trace_context *tc);
+
 #endif //AUTO_SSH_AUTH_TRACER_H
