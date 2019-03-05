@@ -11,16 +11,14 @@
 #include <fcntl.h>
 #include <malloc.h>
 #include <event.h>
+#include <assert.h>
 #include "trace_context.h"
+#include "util.h"
 
 static const char *prog_name = "hack_ssh_auth";
-static pid_t ssh_pid = -1;
-static int ssh_mem_fd = -1;
 
 #define PROMPT_PASSWORD "\nYour [EMAIL] password: "
 #define PROMPT_TOKEN "\nYour [VPN] token: "
-#define SSH_INPUT_FD 6
-#define SSH_OUTPUT_FD 7
 
 static enum {
 	STATE_PROMPT_PASSWORD,
@@ -42,38 +40,43 @@ int msg(const char *fmt, ...)
 	return rc;
 }
 
-#define FATAL(...) do {msg(__VA_ARGS__); _exit(1);} while(0)
-#define min(a, b) ((a)<(b)?(a):(b))
-
-ssize_t download_memory(void *dst, size_t nbytes, uintptr_t src)
+static int find_str(const char *haystack, size_t len, const char *needle, int *distance)
 {
-	ssize_t n;
+	const char *h, *n;
+	int d = *distance;
+	int found = 0;
 
-	n = pread(ssh_mem_fd, dst, nbytes, src);
-	if (n != nbytes) {
-		FATAL("Unable to download memory: %s\n", strerror(errno));
+	h = haystack;
+	n = needle + d;
+
+	while (h - haystack < len) {
+		if (*h != *n) {
+			h++;
+			n = needle;
+		} else {
+			h++;
+			n++;
+			if (*n == 0) {
+				found = 1;
+				goto out;
+			}
+		}
 	}
-	return n;
-}
 
-ssize_t upload_memory(const void *src, size_t nbytes, uintptr_t dst)
-{
-	ssize_t n;
-
-	n = pwrite(ssh_mem_fd, src, nbytes, dst);
-	if (n != nbytes) {
-		FATAL("Unable to upload memory: %s\n", strerror(errno));
-	}
-	return n;
+out:
+	*distance = (int) (n - needle);
+	return found;
 }
 
 static int match_prompt(struct trace_context *tc, const char *prompt, size_t size)
 {
+	static int distance = 0;
+	
 	switch (state) {
 	case STATE_PROMPT_PASSWORD:
-		if (memcmp(prompt + size - sizeof(PROMPT_PASSWORD), PROMPT_PASSWORD, sizeof(PROMPT_PASSWORD) - 1) == 0) {
-			fprintf(stderr, "password prompt.\n");
+		if (find_str(prompt, size, PROMPT_PASSWORD, &distance)) {
 			state = STATE_FEED_PASSWORD;
+			distance = 0;
 			tc->drain_data = 1;
 		}
 		break;
@@ -105,14 +108,10 @@ int trace_write(struct trace_context *tc, uintptr_t sbuf, size_t count)
 			break;
 		}
 
-		write(STDOUT_FILENO, buf, (size_t) n);
 		match_prompt(tc, buf, (size_t) n);
 	}
 
-	trace_block(tc);
-	tc->regs.rax = count;
-	trace_commit_regs(tc);
-	return SYSCALL_HANDLED;
+	return SYSCALL_BYPASS;
 }
 
 void trace_read(struct user_regs_struct *regs)
@@ -120,10 +119,6 @@ void trace_read(struct user_regs_struct *regs)
 	int sfd = (int) regs->rdi;
 	uintptr_t sbuf = regs->rsi;
 	size_t scount = regs->rdx;
-
-	if (sfd != SSH_INPUT_FD) {
-		return;
-	}
 
 	switch (state) {
 	case STATE_FEED_PASSWORD:
@@ -133,12 +128,6 @@ void trace_read(struct user_regs_struct *regs)
 		break;
 	}
 }
-
-void trace_select(struct user_regs_struct *regs)
-{
-	// FIXME
-}
-
 
 int main(int argc, char *argv[])
 {

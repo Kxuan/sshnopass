@@ -93,7 +93,7 @@ ssize_t trace_copy_cstr(struct trace_context *tc, char *buf, size_t count, uintp
 		p += n;
 		next += n;
 		remains -= n;
-		copy_size = PAGE_SIZE;
+		copy_size = min(PAGE_SIZE, remains);
 	}
 
 out:
@@ -164,8 +164,6 @@ void trace_commit_regs(struct trace_context *tc)
 
 void trace_block(struct trace_context *tc)
 {
-	long rc;
-
 	tc->regs.orig_rax = (unsigned long long int) -1;
 	trace_commit_regs(tc);
 	trace_step(tc);
@@ -318,15 +316,17 @@ static int hook_select(struct trace_context *tc)
 		sexceptfds = regs->r10,
 		stimeout = regs->r8;
 	ssize_t n;
-	fd_set readfds, zerofds;
+	fd_set readfds = {0}, fdset = {0};
 	int active_fd;
+	size_t byte_in_use = (size_t) (snfds / 8);
 
 	if (!tc->drain_data) {
 		return SYSCALL_BYPASS;
 	}
 
-	n = trace_pread(tc, &readfds, sizeof(fd_set), sreadfds);
-	for (int i = 0; i < FD_SETSIZE; ++i) {
+	n = trace_pread(tc, &readfds, byte_in_use, sreadfds);
+	n = trace_pread(tc, &fdset, byte_in_use, swritefds);
+	for (int i = 0; i < min(snfds, FD_SETSIZE); ++i) {
 		if (FD_ISSET(i, &tc->tty_fd) && FD_ISSET(i, &readfds)) {
 			active_fd = i;
 			goto found;
@@ -340,10 +340,24 @@ found:
 	FD_ZERO(&readfds);
 	FD_SET(active_fd, &readfds);
 
-	FD_ZERO(&zerofds);
-	trace_pwrite(tc, &readfds, sizeof(readfds), sreadfds);
-	trace_pwrite(tc, &zerofds, sizeof(zerofds), swritefds);
-	trace_pwrite(tc, &zerofds, sizeof(zerofds), sexceptfds);
+	FD_ZERO(&fdset);
+	n = trace_pwrite(tc, &readfds, byte_in_use, sreadfds);
+	if (n < 0) {
+		FATAL("trace_pwrite: %s\n", strerror(errno));
+	}
+	if (swritefds) {
+		n = trace_pwrite(tc, &fdset, byte_in_use, swritefds);
+		if (n < 0) {
+			FATAL("trace_pwrite: %s\n", strerror(errno));
+		}
+	}
+	if (sexceptfds) {
+		n = trace_pwrite(tc, &fdset, byte_in_use, sexceptfds);
+		if (n < 0) {
+			FATAL("trace_pwrite: %s\n", strerror(errno));
+		}
+	}
+	trace_commit_regs(tc);
 	return SYSCALL_HANDLED;
 }
 
@@ -357,6 +371,7 @@ int trace_next(struct trace_context *tc)
 		return rc;
 	}
 
+	printf("SYSCALL: %s\n", strsyscall((int) tc->regs.orig_rax));
 	switch (tc->regs.orig_rax) {
 	case __NR_open:
 		op = hook_open(tc);
