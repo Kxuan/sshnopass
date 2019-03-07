@@ -3,6 +3,7 @@
 
 This program is used to help you fill password and OTP token to ssh 
 automatically.
+Only x86-64 platform is supported currently!
 
 ## Build
 ```sh
