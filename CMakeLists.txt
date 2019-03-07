@@ -13,3 +13,6 @@ add_executable(sshnopass
         base32.c base32.h)
 target_link_libraries(sshnopass PUBLIC mbedcrypto)
 
+install(TARGETS sshnopass
+        RUNTIME DESTINATION bin
+        )
