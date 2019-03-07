@@ -222,7 +222,6 @@ static int sys_openat_entry(struct trace_context *tc, const char *filename, int 
 	trace_step(tc);
 	sfd = (int) regs->rax;
 	if (sfd >= 0) {
-		printf("new fd %d\n", sfd);
 		FD_SET(sfd, &tc->tty_fd);
 	}
 	return SYSCALL_HANDLED;
@@ -326,7 +325,7 @@ static int hook_select(struct trace_context *tc)
 		sexceptfds = regs->r10,
 		stimeout = regs->r8;
 	ssize_t n;
-	fd_set readfds = {0}, fdset = {0};
+	fd_set readfds = {0}, zerofds = {0};
 	int active_fd;
 	size_t byte_in_use = (size_t) (snfds / 8);
 
@@ -335,7 +334,6 @@ static int hook_select(struct trace_context *tc)
 	}
 
 	n = trace_pread(tc, &readfds, byte_in_use, sreadfds);
-	n = trace_pread(tc, &fdset, byte_in_use, swritefds);
 	for (int i = 0; i < min(snfds, FD_SETSIZE); ++i) {
 		if (FD_ISSET(i, &tc->tty_fd) && FD_ISSET(i, &readfds)) {
 			active_fd = i;
@@ -350,19 +348,19 @@ found:
 	FD_ZERO(&readfds);
 	FD_SET(active_fd, &readfds);
 
-	FD_ZERO(&fdset);
+	FD_ZERO(&zerofds);
 	n = trace_pwrite(tc, &readfds, byte_in_use, sreadfds);
 	if (n < 0) {
 		FATAL("trace_pwrite");
 	}
 	if (swritefds) {
-		n = trace_pwrite(tc, &fdset, byte_in_use, swritefds);
+		n = trace_pwrite(tc, &zerofds, byte_in_use, swritefds);
 		if (n < 0) {
 			FATAL("trace_pwrite");
 		}
 	}
 	if (sexceptfds) {
-		n = trace_pwrite(tc, &fdset, byte_in_use, sexceptfds);
+		n = trace_pwrite(tc, &zerofds, byte_in_use, sexceptfds);
 		if (n < 0) {
 			FATAL("trace_pwrite");
 		}
