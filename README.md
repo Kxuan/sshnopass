@@ -15,7 +15,7 @@ $ sudo make install
 ```
 
 ## Configuration
-The config file should be placed in `$HOME/.ssh/ssh_auth_config`.
+The config file should be placed in `$HOME/.ssh/sshnopass_config`.
 Currently, the config file is really simple. Its format **WILL** changed in the
 future.
 

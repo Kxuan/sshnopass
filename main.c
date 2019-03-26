@@ -19,7 +19,7 @@
 
 #define PROMPT_PASSWORD "\nYour [EMAIL] password: "
 #define PROMPT_TOKEN "\nYour [VPN] token: "
-#define DEFAULT_CONFIG_FILE_SUFFIX "/.ssh/ssh_auth_config"
+#define DEFAULT_CONFIG_FILE_SUFFIX "/.ssh/sshnopass_config"
 struct {
 	size_t len_password;
 	char *password;
